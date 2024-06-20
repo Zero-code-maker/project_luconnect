@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, ConfigDict
+from pydantic import BaseModel, EmailStr, ConfigDict, Field
 from typing import Optional
 
 ##### Autenticação #####
@@ -17,6 +17,7 @@ class UserCreate(UserBase):
 class User(UserBase):
     id: int
     password: str
+    #is_admin: bool = False  # Adicionando campo para identificar se é administrador
     
     @classmethod
     def json_schema_extra(cls, schema, model):
@@ -32,4 +33,20 @@ class TokenRefresh(BaseModel):
     
 ##### Cliente #####
 
+class ClientBase(BaseModel):
+    nome: str
+    email: EmailStr
+    cpf: str
+
+class ClientCreate(ClientBase):
+    pass
+
+class ClientUpdate(BaseModel):
+    nome: Optional[str] = None
+    email: Optional[EmailStr] = None
+    cpf: Optional[str] = None
+
+class Client(ClientBase):
+    id: int
     
+    model_config = ConfigDict(from_attributes=True)
