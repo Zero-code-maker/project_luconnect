@@ -4,10 +4,10 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from datetime import timedelta
 from jose import jwt
 from jwt import PyJWTError
-from API.database import create_user
+from API.database import create_user, get_all_products
 from API import database
 from API.auth import ACCESS_TOKEN_EXPIRE_MINUTES, ALGORITHM, SECRET_KEY, authenticate_user_and_generate_token, create_access_token
-from API.models import Client, ClientCreate, ClientUpdate, Token, TokenRefresh, User, UserCreate
+from API.models import Client, ClientCreate, ClientUpdate, Product, ProductCreate, ProductUpdate, Token, TokenRefresh, User, UserCreate
 
 router = APIRouter()
 
@@ -150,6 +150,124 @@ async def delete_client(client_id: int, conn = Depends(database.get_connection),
                 detail="Cliente não encontrado",
             )
         return {"message": "Cliente excluído com sucesso"}
+
+    except PyJWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token inválido ou expirado",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token inválido",
+            headers={"WWW-Authenticate": "Bearer"},
+        )        
+        
+##### Produtos #####
+
+@router.post("/products", response_model=Product)
+async def create_client(product: ProductCreate, conn = Depends(database.get_connection), token: str = Depends(oauth2_scheme)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        
+        db_product = database.create_product(conn, product)
+        if db_product:
+            return db_product
+        else:
+            raise HTTPException(status_code=500,
+                detail="Erro ao criar o produto"
+            )
+    except PyJWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token inválido ou expirado",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+@router.get("/products", response_model=List[Product])
+async def all_product(conn = Depends(database.get_connection), token: str = Depends(oauth2_scheme)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        
+        products = get_all_products(conn)
+        return products
+        
+    except PyJWTError:
+            raise HTTPException(status_code=500,
+                detail="Erro ao criar o produto"
+            )
+    except:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token inválido ou expirado",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+        
+@router.get("/products/{product_id}", response_model=Product)
+async def get_product_by_id(product_id: int, conn = Depends(database.get_connection), token: str = Depends(oauth2_scheme)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        
+        product = database.get_product_id(conn, product_id)
+        if product is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Produto não encontrado",
+            )
+        return product
+
+    except PyJWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token inválido ou expirado",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token inválido",
+            headers={"WWW-Authenticate": "Bearer"},
+        )                
+
+@router.put("/products/{product_id}", response_model=Product)
+async def update_product(product_id: int, product_update: ProductUpdate, conn = Depends(database.get_connection), token: str = Depends(oauth2_scheme)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+
+        updated_product = database.update_product(conn, product_id, product_update)
+        if updated_product is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Produto não encontrado",
+            )
+        return updated_product
+
+    except PyJWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token inválido ou expirado",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token inválido",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+                
+@router.delete("/products/{product_id}", response_model=dict)
+async def delete_product(product_id: int, conn = Depends(database.get_connection), token: str = Depends(oauth2_scheme)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+
+        deleted = database.delete_product(conn, product_id)
+        if not deleted:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Produto não encontrado",
+            )
+        return {"message": "Produto excluído com sucesso"}
 
     except PyJWTError:
         raise HTTPException(

@@ -1,8 +1,8 @@
-from typing import Optional
+from typing import List, Optional
 import psycopg2
 from passlib.context import CryptContext
 from psycopg2 import sql
-from API.models import ClientUpdate, UserCreate, User, ClientCreate, Client
+from API.models import ClientUpdate, Product, ProductCreate, UserCreate, User, ClientCreate, Client
 import os
 from dotenv import load_dotenv
 
@@ -98,7 +98,8 @@ def get_user(conn, username: str):
 
 def client_exists(conn, email: str, cpf: str) -> bool:
     query = sql.SQL("""
-        SELECT EXISTS(SELECT 1 FROM clients WHERE email = %s OR cpf = %s)
+        SELECT EXISTS(SELECT 1 FROM clients 
+        WHERE email = %s OR cpf = %s)
     """)
     with conn.cursor() as cur:
         cur.execute(query, (email, cpf))
@@ -113,7 +114,7 @@ def create_client_table(conn):
                 id SERIAL PRIMARY KEY,
                 nome VARCHAR(255) NOT NULL,
                 email VARCHAR(255) NOT NULL,
-                cpf VARCHAR(14) NOT NULL
+                cpf NUMERIC(11, 0) NOT NULL
             )
         """)
         conn.commit()
@@ -127,7 +128,7 @@ def create_client(conn, client: ClientCreate):
 
     nome = client.nome[:255]
     email = client.email[:255]
-    cpf = client.cpf[:14]
+    cpf = str(client.cpf)[:11]
     
     query = sql.SQL("""
         INSERT INTO clients (nome, email, cpf)
@@ -216,4 +217,143 @@ def delete_client(conn, client_id: int) -> bool:
         cur.execute(query, (client_id,))
         row = cur.fetchone()
         conn.commit()
-        return row is not None     
+        return row is not None
+    
+##### Produto #####
+
+def create_product_table(conn):
+    with conn.cursor() as cur:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS products (
+                id SERIAL PRIMARY KEY,
+                descricao TEXT NOT NULL,
+                valor_venda NUMERIC(10, 2) NOT NULL,
+                codigo_barras VARCHAR(255),
+                secao VARCHAR(255),
+                estoque_inicial INTEGER,
+                data_validade DATE,
+                imagens TEXT[]
+            )
+        """)
+        conn.commit()
+
+def create_product(conn, product: ProductCreate) -> Optional[Product]:
+    create_product_table(conn)
+
+    query = sql.SQL("""
+        INSERT INTO products (descricao, valor_venda, codigo_barras, secao, estoque_inicial, data_validade, imagens)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        RETURNING id, descricao, valor_venda, codigo_barras, secao, estoque_inicial, data_validade, imagens
+    """)
+    with conn.cursor() as cur:
+        cur.execute(query, (
+            product.descricao,
+            product.valor_venda,
+            product.codigo_barras,
+            product.secao,
+            product.estoque_inicial,
+            product.data_validade,
+            product.imagens
+        ))
+        row = cur.fetchone()
+        conn.commit()
+        if row:
+            product_data = {
+                'id': row[0],
+                'descricao': row[1],
+                'valor_venda': row[2],
+                'codigo_barras': row[3],
+                'secao': row[4],
+                'estoque_inicial': row[5],
+                'data_validade': row[6],
+                'imagens': row[7]
+            }
+            return Product(**product_data)
+        return None
+
+def get_product_id(conn, product_id: int) -> Optional[Product]:
+    query = sql.SQL("SELECT id, descricao, valor_venda, codigo_barras, secao, estoque_inicial, data_validade, imagens FROM products WHERE id = %s")
+    with conn.cursor() as cur:
+        cur.execute(query, (product_id,))
+        row = cur.fetchone()
+        if row:
+            product_data = {
+                'id': row[0],
+                'descricao': row[1],
+                'valor_venda': row[2],
+                'codigo_barras': row[3],
+                'secao': row[4],
+                'estoque_inicial': row[5],
+                'data_validade': row[6],
+                'imagens': row[7]
+            }
+            return Product(**product_data)
+        return None
+
+def get_all_products(conn) -> List[Product]:
+    query = sql.SQL("SELECT id, descricao, valor_venda, codigo_barras, secao, estoque_inicial, data_validade, imagens FROM products")
+    with conn.cursor() as cur:
+        cur.execute(query)
+        rows = cur.fetchall()
+        products = []
+        for row in rows:
+            product_data = {
+                'id': row[0],
+                'descricao': row[1],
+                'valor_venda': row[2],
+                'codigo_barras': row[3],
+                'secao': row[4],
+                'estoque_inicial': row[5],
+                'data_validade': row[6],
+                'imagens': row[7]
+            }
+            products.append(Product(**product_data))
+        return products
+
+def update_product(conn, product_id: int, product_data: ProductCreate) -> Optional[Product]:
+    query = sql.SQL("""
+        UPDATE products
+        SET descricao = COALESCE(%s, descricao),
+            valor_venda = COALESCE(%s, valor_venda),
+            codigo_barras = COALESCE(%s, codigo_barras),
+            secao = COALESCE(%s, secao),
+            estoque_inicial = COALESCE(%s, estoque_inicial),
+            data_validade = COALESCE(%s, data_validade),
+            imagens = COALESCE(%s, imagens)
+        WHERE id = %s
+        RETURNING id, descricao, valor_venda, codigo_barras, secao, estoque_inicial, data_validade, imagens
+    """)
+    with conn.cursor() as cur:
+        cur.execute(query, (
+            product_data.descricao,
+            product_data.valor_venda,
+            product_data.codigo_barras,
+            product_data.secao,
+            product_data.estoque_inicial,
+            product_data.data_validade,
+            product_data.imagens,
+            product_id
+        ))
+        row = cur.fetchone()
+        conn.commit()
+        if row:
+            updated_product_data = {
+                'id': row[0],
+                'descricao': row[1],
+                'valor_venda': row[2],
+                'codigo_barras': row[3],
+                'secao': row[4],
+                'estoque_inicial': row[5],
+                'data_validade': row[6],
+                'imagens': row[7]
+            }
+            return Product(**updated_product_data)
+        return None
+
+def delete_product(conn, product_id: int) -> bool:
+    query = sql.SQL("DELETE FROM products WHERE id = %s RETURNING id")
+    with conn.cursor() as cur:
+        cur.execute(query, (product_id,))
+        row = cur.fetchone()
+        conn.commit()
+        return row is not None         

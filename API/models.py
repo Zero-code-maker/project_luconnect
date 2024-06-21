@@ -1,5 +1,7 @@
 from pydantic import BaseModel, EmailStr, ConfigDict, Field
-from typing import Optional
+from typing import Optional, List
+from datetime import date
+
 
 ##### Autenticação #####
 
@@ -36,7 +38,7 @@ class TokenRefresh(BaseModel):
 class ClientBase(BaseModel):
     nome: str
     email: EmailStr
-    cpf: str
+    cpf: int
 
 class ClientCreate(ClientBase):
     pass
@@ -44,9 +46,38 @@ class ClientCreate(ClientBase):
 class ClientUpdate(BaseModel):
     nome: Optional[str] = None
     email: Optional[EmailStr] = None
-    cpf: Optional[str] = None
+    cpf: Optional[int] = None
 
 class Client(ClientBase):
     id: int
     
     model_config = ConfigDict(from_attributes=True)
+    
+##### Produto #####
+
+class ProductBase(BaseModel):
+    descricao: str
+    valor_venda: float
+    codigo_barras: str = Field(..., max_length=13)
+    secao: str
+    estoque_inicial: int
+    data_validade: Optional[date] = None
+    imagens: Optional[List[str]] = []
+
+class ProductCreate(ProductBase):
+    pass
+
+
+class ProductUpdate(ProductBase):
+    descricao: Optional[str] = None
+    valor_venda: Optional[float] = None
+    codigo_barras: Optional[str] = None
+    secao: Optional[str] = None
+    estoque_inicial: Optional[int] = None
+    data_validade: Optional[date] = None
+    imagens: Optional[List[str]] = None
+
+class Product(ProductBase):
+    id: int
+    
+    model_config = ConfigDict(from_attributes=True)    
