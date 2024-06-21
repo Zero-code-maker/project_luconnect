@@ -1,0 +1,12 @@
+version: "3.9"
+
+services:
+  app:
+    build: .
+    restart: always
+    environment:
+      DATABASE_URL: postgresql://postgres:znMknYVqehZUcxdbFApTVCyNlPRdFdAC@monorail.proxy.rlwy.net:41629/railway
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/API
