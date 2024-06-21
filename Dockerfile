@@ -17,4 +17,4 @@ COPY . .
 ENV PYTHONUNBUFFERED=1
 
 # Execute a aplicação
-CMD ["uvicorn", "API.main:app", "--host", "127.0.0.1", "--port", "8000"]
+CMD ["uvicorn", "API.main:app", "--host", "0.0.0.0", "--port", "80"]
