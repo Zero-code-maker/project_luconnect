@@ -1,20 +1,15 @@
-# Use a imagem oficial do Python como base
-FROM python:3.10
+FROM python:3.10-slim
 
-# Defina o diretório de trabalho
-WORKDIR /API
-
-# Copie os arquivos requirements.txt para o contêiner
-COPY requirements.txt .
-
-# Instale as dependências
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copie o restante do código da aplicação para o contêiner
-COPY . .
-
-# Defina a variável de ambiente para desativar o buffer de saída do Python
 ENV PYTHONUNBUFFERED=1
 
-# Execute a aplicação
+WORKDIR /API
+
+COPY . /API
+
+COPY requirements.txt .
+
+RUN pip install --no-cache-dir -r requirements.txt
+
+EXPOSE 80
+
 CMD ["uvicorn", "API.main:app", "--host", "0.0.0.0", "--port", "80"]
