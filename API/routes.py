@@ -167,7 +167,7 @@ async def delete_client(client_id: int, conn = Depends(database.get_connection),
 ##### Produtos #####
 
 @router.post("/products", response_model=Product)
-async def create_client(product: ProductCreate, conn = Depends(database.get_connection), token: str = Depends(oauth2_scheme)):
+async def create_product(product: ProductCreate, conn = Depends(database.get_connection), token: str = Depends(oauth2_scheme)):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         
