@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, ConfigDict, Field
+from pydantic import BaseModel, EmailStr, ConfigDict, Field, field_validator
 from typing import Optional, List
 from datetime import date
 
@@ -80,4 +80,36 @@ class ProductUpdate(ProductBase):
 class Product(ProductBase):
     id: int
     
-    model_config = ConfigDict(from_attributes=True)    
+    model_config = ConfigDict(from_attributes=True)
+    
+##### Pedidos ##### 
+
+class OrderItemBase(BaseModel):
+    product_id: int
+    quantity: int 
+
+class OrderItemCreate(OrderItemBase):
+    pass
+
+class OrderItem(OrderItemBase):
+    id: int
+    order_id: int
+    product: Product
+
+    model_config = ConfigDict(from_attributes=True)
+
+class OrderBase(BaseModel):
+    client_id: int
+    items: List[OrderItemCreate]
+
+class OrderCreate(OrderBase):
+    pass
+
+class Order(OrderBase):
+    id: int
+    total: float
+    created_at: date
+    client: Client
+    items: List[OrderItem]
+
+    model_config = ConfigDict(from_attributes=True)      

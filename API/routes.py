@@ -4,10 +4,10 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from datetime import timedelta
 from jose import jwt
 from jwt import PyJWTError
-from API.database import create_user, get_all_products
+from API.database import create_order, create_user, get_all_orders, get_all_products
 from API import database
 from API.auth import ACCESS_TOKEN_EXPIRE_MINUTES, ALGORITHM, SECRET_KEY, authenticate_user_and_generate_token, create_access_token
-from API.models import Client, ClientCreate, ClientUpdate, Product, ProductCreate, ProductUpdate, Token, TokenRefresh, User, UserCreate
+from API.models import Client, ClientCreate, ClientUpdate, Order, OrderCreate, Product, ProductCreate, ProductUpdate, Token, TokenRefresh, User, UserCreate
 
 router = APIRouter()
 
@@ -280,4 +280,27 @@ async def delete_product(product_id: int, conn = Depends(database.get_connection
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token inválido",
             headers={"WWW-Authenticate": "Bearer"},
-        )        
+        )
+        
+##### Pedidos #####
+
+@router.post("/orders", response_model=Order)
+async def create_order_route(order: OrderCreate, conn = Depends(database.get_connection), token: str = Depends(oauth2_scheme)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        
+        db_order = create_order(conn, order)
+        if db_order:
+            return db_order
+        else:
+            raise HTTPException(status_code=500,
+                detail="Erro ao criar o pedido"
+            )
+    except PyJWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token inválido ou expirado",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+        

@@ -1,8 +1,9 @@
+from datetime import datetime
 from typing import List, Optional
 import psycopg2
 from passlib.context import CryptContext
 from psycopg2 import sql
-from API.models import ClientUpdate, Product, ProductCreate, UserCreate, User, ClientCreate, Client
+from API.models import ClientUpdate, Order, OrderCreate, OrderItem, Product, ProductCreate, UserCreate, User, ClientCreate, Client
 import os
 from dotenv import load_dotenv
 
@@ -356,4 +357,161 @@ def delete_product(conn, product_id: int) -> bool:
         cur.execute(query, (product_id,))
         row = cur.fetchone()
         conn.commit()
-        return row is not None         
+        return row is not None
+    
+##### Pedidos #####
+
+def create_orders_table(conn):
+    with conn.cursor() as cur:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS orders (
+                id SERIAL PRIMARY KEY,
+                client_id INTEGER NOT NULL REFERENCES clients(id),
+                total NUMERIC(10, 2) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS order_items (
+                id SERIAL PRIMARY KEY,
+                order_id INTEGER NOT NULL REFERENCES orders(id),
+                product_id INTEGER NOT NULL REFERENCES products(id),
+                quantity INTEGER NOT NULL
+            )
+        """)
+        conn.commit()
+
+def update_product_stock(conn, product_id: int, quantity: int):
+    query = sql.SQL("""
+        UPDATE products
+        SET estoque_inicial = estoque_inicial - %s
+        WHERE id = %s AND estoque_inicial - %s >= 0
+        RETURNING id, estoque_inicial
+    """)
+    with conn.cursor() as cur:
+        cur.execute(query, (quantity, product_id, quantity))
+        row = cur.fetchone()
+        conn.commit()
+        if not row:
+            raise ValueError(f"Estoque insuficiente para o produto com ID {product_id}")
+        updated_stock = row[1]
+        if updated_stock < 0:
+            raise ValueError(f"Estoque insuficiente para o produto com ID {product_id}")
+
+
+def create_order(conn, order: OrderCreate) -> Optional[Order]:
+    create_orders_table(conn)
+
+    total = 0
+    order_items = []
+    for item in order.items:
+        product = get_product_id(conn, item.product_id)
+        if not product:
+            raise ValueError(f"Produto com ID {item.product_id} não encontrado")
+        if product.estoque_inicial < item.quantity:
+            raise ValueError(f"Estoque insuficiente para o produto com ID {item.product_id}")
+        total += product.valor_venda * item.quantity
+
+    query = sql.SQL("""
+        INSERT INTO orders (client_id, total, created_at)
+        VALUES (%s, %s, %s)
+        RETURNING id, client_id, total, created_at
+    """)
+    created_at = datetime.now().date()
+    with conn.cursor() as cur:
+        cur.execute(query, (order.client_id, total, created_at))
+        order_row = cur.fetchone()
+        if not order_row:
+            return None
+        order_id = order_row[0]
+
+        for item in order.items:
+            query = sql.SQL("""
+                INSERT INTO order_items (order_id, product_id, quantity)
+                VALUES (%s, %s, %s)
+                RETURNING id
+            """)
+            cur.execute(query, (order_id, item.product_id, item.quantity))
+            order_item_id = cur.fetchone()[0]
+            update_product_stock(conn, item.product_id, item.quantity)
+
+            product = get_product_id(conn, item.product_id)  # Obter o produto atualizado
+            order_item = OrderItem(
+                id=order_item_id,
+                order_id=order_id,
+                product=product,
+                **item.model_dump()  # Isso copia todos os campos de item para OrderItem
+            )
+            order_items.append(order_item)
+
+        conn.commit()
+
+        client = get_client_id(conn, order.client_id)  # Obter o cliente
+        return Order(
+            id=order_row[0],
+            client_id=order_row[1],
+            total=order_row[2],
+            created_at=order_row[3],
+            items=order_items,
+            client=client
+        )
+        
+def get_all_orders(conn) -> List[Order]:
+    query = sql.SQL("""
+        SELECT o.id, o.client_id, o.total, o.created_at, c.nome, c.email, c.cpf
+        FROM orders o
+        JOIN clients c ON o.client_id = c.id
+    """)
+    with conn.cursor() as cur:
+        cur.execute(query)
+        order_rows = cur.fetchall()
+        orders = []
+        for order_row in order_rows:
+            client_data = {
+                'id': order_row[1],
+                'nome': order_row[4],
+                'email': order_row[5],
+                'cpf': order_row[6]
+            }
+
+            query_items = sql.SQL("""
+                SELECT oi.id, oi.order_id, oi.product_id, oi.quantity, p.descricao, p.valor_venda, p.codigo_barras, p.secao, p.estoque_inicial, p.data_validade, p.imagens
+                FROM order_items oi
+                JOIN products p ON oi.product_id = p.id
+                WHERE oi.order_id = %s
+            """)
+            cur.execute(query_items, (order_row[0],))
+            items_rows = cur.fetchall()
+
+            items = []
+            for row in items_rows:
+                product_data = {
+                    'id': row[2],
+                    'descricao': row[4],
+                    'valor_venda': row[5],
+                    'codigo_barras': row[6],
+                    'secao': row[7],
+                    'estoque_inicial': row[8],
+                    'data_validade': row[9],
+                    'imagens': row[10]
+                }
+                item_data = {
+                    'id': row[0],
+                    'order_id': row[1],
+                    'product_id': row[2],
+                    'quantity': row[3],
+                    'product': Product(**product_data)
+                }
+                items.append(OrderItem(**item_data))
+
+            order = Order(
+                id=order_row[0],
+                client_id=order_row[1],
+                total=order_row[2],
+                created_at=order_row[3],
+                client=Client(**client_data),
+                items=items
+            )
+            orders.append(order)
+
+        return orders
